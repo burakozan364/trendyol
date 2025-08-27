@@ -33,7 +33,7 @@ async function fetchAllReviews(productId) {
         `,
         variables: {
           productId,
-          pagination: { page, limit: 5 },
+          pagination: { page, limit: 15 },
         }
       })
     });
@@ -88,3 +88,4 @@ app.post("/summarize", async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Backend ${PORT} portunda çalışıyor`));
+
