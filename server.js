@@ -8,14 +8,13 @@ app.use(express.json());
 
 app.post("/summarize", async (req, res) => {
   const { productId } = req.body;
+  console.log("🟢 İstek geldi, productId:", productId);
 
   try {
-    // 1. Ikas GraphQL'den yorumları çek
+    // ✅ Yorumları senin Ikas API'nden çekiyoruz
     const gqlResponse = await fetch("https://api.myikas.com/api/sf/graphql?op=listCustomerReviews", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         query: `
           query listCustomerReviews($productId: String!, $page: Int, $limit: Int) {
@@ -26,23 +25,25 @@ app.post("/summarize", async (req, res) => {
               count
               data {
                 comment
-                star
               }
             }
           }
         `,
-        variables: { productId, page: 1, limit: 20 }
+        variables: { productId, page: 1, limit: 10 }
       })
     });
 
     const gqlData = await gqlResponse.json();
+    console.log("🟠 myikas cevabı:", JSON.stringify(gqlData, null, 2));
+
     const comments = gqlData.data?.listCustomerReviews?.data?.map(r => r.comment).filter(Boolean) || [];
+    console.log("🟡 Toplanan yorum sayısı:", comments.length);
 
     if (comments.length === 0) {
       return res.json({ summary: "Henüz yorum yok.", count: 0 });
     }
 
-    // 2. OpenAI API ile özetleme
+    // ✅ OpenAI'ya gönderiyoruz
     const aiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -52,7 +53,7 @@ app.post("/summarize", async (req, res) => {
       body: JSON.stringify({
         model: "gpt-4o-mini",
         messages: [
-          { role: "system", content: "Sen bir e-ticaret yorum özeti yapıcısısın. Yorumları kısa ve anlaşılır şekilde özetle." },
+          { role: "system", content: "Sen bir e-ticaret yorum özeti yapıcısısın. Yorumları kısa, anlaşılır bir özet halinde döndür." },
           { role: "user", content: comments.join("\n\n") }
         ],
         max_tokens: 200
@@ -60,11 +61,13 @@ app.post("/summarize", async (req, res) => {
     });
 
     const aiData = await aiResponse.json();
-    const summary = aiData.choices?.[0]?.message?.content || "Özet alınamadı.";
+    console.log("🔵 OpenAI cevabı:", JSON.stringify(aiData, null, 2));
 
+    const summary = aiData.choices?.[0]?.message?.content || "Özet alınamadı.";
     res.json({ summary, count: comments.length });
 
   } catch (err) {
+    console.error("🔴 Backend Hatası:", err);
     res.status(500).json({ error: err.message });
   }
 });
