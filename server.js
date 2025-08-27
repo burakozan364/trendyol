@@ -1,44 +1,40 @@
 import express from "express";
 import fetch from "node-fetch";
+import cors from "cors";
 
 const app = express();
+app.use(cors());
 app.use(express.json());
 
-// Çevre değişkeninden API key oku
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-
 app.post("/summarize", async (req, res) => {
-  try {
-    const { reviews } = req.body;
-    const allText = reviews.map(r => r.text).join("\n");
+  const { comments } = req.body;
 
+  try {
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${OPENAI_API_KEY}`
+        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+        "Content-Type": "application/json"
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
         messages: [
           {
             role: "system",
-            content: "Sen Trendyol ürün yorumlarını özetleyen bir asistansın. Özetinde olumlu yönler, olumsuz yönler ve genel kanaati kısaca belirt."
+            content: "Sen bir e-ticaret yorum özeti yapıcısısın. Yorumları kısa, anlaşılır bir özet halinde döndür."
           },
-          { role: "user", content: allText }
+          { role: "user", content: comments.join("\n\n") }
         ],
-        temperature: 0.3
+        max_tokens: 200
       })
     });
 
     const data = await response.json();
-    res.json({ summary: data.choices[0].message.content.trim() });
-
+    res.json({ summary: data.choices[0].message.content });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Bir hata oluştu" });
+    res.status(500).json({ error: err.message });
   }
 });
 
-const port = process.env.PORT || 3000;
-app.listen(port, () => console.log(`✅ Server ${port} portunda çalışıyor`));
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`✅ Backend ${PORT} portunda çalışıyor`));
