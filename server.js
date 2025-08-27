@@ -6,61 +6,45 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// 🔹 Tüm sayfalardan yorumları GraphQL API ile çekiyoruz
-async function fetchAllReviews(productId) {
-  let page = 1;
-  let allComments = [];
-  let hasNext = true;
-
-  while (hasNext) {
-    const res = await fetch("https://www.elitcikolata.com.tr/graphql?op=listCustomerReviews", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        // Eğer login gerekiyorsa buraya Authorization header koyman lazım
-      },
-      body: JSON.stringify({
-        query: `
-          query listCustomerReviews($pagination: PaginationInput, $productId: String!) {
-            listCustomerReviews(pagination: $pagination, productId: $productId) {
-              count
-              hasNext
-              data {
-                comment
-              }
-            }
-          }
-        `,
-        variables: {
-          productId,
-          pagination: { page, limit: 15 },
-        }
-      })
-    });
-
-    const json = await res.json();
-    const reviews = json?.data?.listCustomerReviews?.data || [];
-    hasNext = json?.data?.listCustomerReviews?.hasNext || false;
-
-    allComments.push(...reviews.map(r => r.comment));
-    page++;
-  }
-
-  return allComments;
-}
-
-// 🔹 Özetleme endpoint
 app.post("/summarize", async (req, res) => {
   const { productId } = req.body;
 
   try {
-    const comments = await fetchAllReviews(productId);
+    // Trendyol GraphQL endpointi (örnek)
+    const gqlResponse = await fetch("https://public.trendyol.com/discovery-web-websfx-reviewsgraphql", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        query: `
+          query listCustomerReviews($productId: String!, $page: Int, $limit: Int) {
+            listCustomerReviews(
+              productId: $productId,
+              pagination: { page: $page, limit: $limit },
+              sortWithImagesFirst: true
+            ) {
+              count
+              data {
+                comment
+                star
+              }
+            }
+          }
+        `,
+        variables: { productId, page: 1, limit: 20 }
+      })
+    });
 
-    if (!comments.length) {
-      return res.json({ summary: "Henüz yorum bulunamadı.", count: 0 });
+    const gqlData = await gqlResponse.json();
+    const comments = gqlData.data?.listCustomerReviews?.data?.map(r => r.comment).filter(Boolean) || [];
+
+    if (comments.length === 0) {
+      return res.json({ summary: "Henüz yorum yok.", count: 0 });
     }
 
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    // OpenAI API ile özetleme
+    const aiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
@@ -76,11 +60,11 @@ app.post("/summarize", async (req, res) => {
       })
     });
 
-    const data = await response.json();
-    res.json({
-      count: comments.length,
-      summary: data.choices[0].message.content
-    });
+    const aiData = await aiResponse.json();
+    const summary = aiData.choices?.[0]?.message?.content || "Özet alınamadı.";
+
+    res.json({ summary, count: comments.length });
+
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -88,4 +72,3 @@ app.post("/summarize", async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Backend ${PORT} portunda çalışıyor`));
-
