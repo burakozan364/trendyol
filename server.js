@@ -1,3 +1,4 @@
+// index.js
 import express from "express";
 import fetch from "node-fetch";
 import cors from "cors";
@@ -8,13 +9,18 @@ app.use(express.json());
 
 app.post("/summarize", async (req, res) => {
   const { productId } = req.body;
-  console.log("🟢 İstek geldi, productId:", productId);
+
+  if (!productId) {
+    return res.status(400).json({ error: "productId gerekli" });
+  }
 
   try {
-    // ✅ Yorumları senin Ikas API'nden çekiyoruz
+    // 1️⃣ Yorumları myikas API'sinden çekiyoruz
     const gqlResponse = await fetch("https://api.myikas.com/api/sf/graphql?op=listCustomerReviews", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify({
         query: `
           query listCustomerReviews($productId: String!, $page: Int, $limit: Int) {
@@ -25,49 +31,49 @@ app.post("/summarize", async (req, res) => {
               count
               data {
                 comment
+                star
               }
             }
           }
         `,
-        variables: { productId, page: 1, limit: 10 }
-      })
+        variables: { productId, page: 1, limit: 20 },
+      }),
     });
 
     const gqlData = await gqlResponse.json();
-    console.log("🟠 myikas cevabı:", JSON.stringify(gqlData, null, 2));
-
-    const comments = gqlData.data?.listCustomerReviews?.data?.map(r => r.comment).filter(Boolean) || [];
-    console.log("🟡 Toplanan yorum sayısı:", comments.length);
+    const comments =
+      gqlData.data?.listCustomerReviews?.data?.map((r) => r.comment).filter(Boolean) || [];
 
     if (comments.length === 0) {
       return res.json({ summary: "Henüz yorum yok.", count: 0 });
     }
 
-    // ✅ OpenAI'ya gönderiyoruz
+    // 2️⃣ OpenAI ile özetleme
     const aiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
-        "Content-Type": "application/json"
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
         messages: [
-          { role: "system", content: "Sen bir e-ticaret yorum özeti yapıcısısın. Yorumları kısa, anlaşılır bir özet halinde döndür." },
-          { role: "user", content: comments.join("\n\n") }
+          {
+            role: "system",
+            content:
+              "Sen bir e-ticaret yorum özeti yapıcısısın. Kullanıcı yorumlarını kısa, anlaşılır ve net bir özetle döndür.",
+          },
+          { role: "user", content: comments.join("\n\n") },
         ],
-        max_tokens: 200
-      })
+        max_tokens: 200,
+      }),
     });
 
     const aiData = await aiResponse.json();
-    console.log("🔵 OpenAI cevabı:", JSON.stringify(aiData, null, 2));
-
     const summary = aiData.choices?.[0]?.message?.content || "Özet alınamadı.";
-    res.json({ summary, count: comments.length });
 
+    res.json({ summary, count: comments.length });
   } catch (err) {
-    console.error("🔴 Backend Hatası:", err);
     res.status(500).json({ error: err.message });
   }
 });
