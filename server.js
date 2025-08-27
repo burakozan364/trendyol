@@ -33,7 +33,7 @@ app.post("/summarize", async (req, res) => {
         messages: [
           {
             role: "system",
-            content: "Sen bir e-ticaret yorum özeti yapıcısısın. Yorumları kısa, anlaşılır bir özet halinde döndür."
+            content: "Sana iletilen yorumları özet haline getir. Olumlu ve olumsuz yönleri belirt. 300 kelimeyi geçme."
           },
           { role: "user", content: comments.join("\n\n") }
         ],
@@ -111,3 +111,4 @@ app.post("/summarize", async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Backend ${PORT} portunda çalışıyor`));
+
